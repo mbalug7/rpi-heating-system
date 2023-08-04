@@ -1,0 +1,34 @@
+{
+    "mqtt": {
+        "addr": "tcp://192.168.88.190:1883",
+        "username": "username",
+        "password": "password"
+    },
+    "gpiod": {
+        "chip": "gpiochip0",
+        "consumer": "heating-system"
+    },
+    "home_assistant_device": {
+        "identifiers": ["rpi_heating_controller"],
+        "name":         "HeatingController",
+        "manufacturer": "Baltech",
+        "model":        "RPI"
+    },
+    "pumps": [
+        {
+            "id": 1,
+            "name": "Pump 1",
+            "gpio_state_pin": 5
+        },
+        {
+            "id": 2,
+            "name": "Pump 2",
+            "gpio_state_pin": 6
+        },
+        {
+            "id": 3,
+            "name": "Pump 3",
+            "gpio_state_pin": 13
+        }
+    ]
+}
