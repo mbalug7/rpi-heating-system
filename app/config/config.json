@@ -30,5 +30,11 @@
             "name": "Pump 3",
             "gpio_state_pin": 13
         }
+    ],
+    "temperature_sensors": [
+        {
+            "id": "28-011833be43ff",
+            "name": "Separator Inlet"
+        }
     ]
 }

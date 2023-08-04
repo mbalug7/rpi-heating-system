@@ -24,7 +24,11 @@ type HAHeatingPumpsHandler struct {
 }
 
 // NewHAHeatingPumpsHandler creates a new instance of HAHeatingPumpsHandler
-func NewHAHeatingPumpsHandler(mqttClient MQTT.Client, conf *config.AppConfig, pumpSvc services.PumpsService) (*HAHeatingPumpsHandler, error) {
+func NewHAHeatingPumpsHandler(
+	mqttClient MQTT.Client,
+	conf *config.AppConfig,
+	pumpSvc services.PumpsService,
+) (*HAHeatingPumpsHandler, error) {
 
 	h := &HAHeatingPumpsHandler{
 		client:   mqttClient,
@@ -53,19 +57,22 @@ func NewHAHeatingPumpsHandler(mqttClient MQTT.Client, conf *config.AppConfig, pu
 	for _, pump := range h.pumpCfgs {
 		token := h.client.Publish(pump.AvailabilityTopic, 0, true, "online")
 		if !token.WaitTimeout(2 * time.Second) {
-			return nil, fmt.Errorf("failed to update valve availability, %w", token.Error())
+			return nil, fmt.Errorf("failed to update pump availability, %w", token.Error())
 		}
 	}
 
+	// report pumps states
 	for id, pump := range h.pumpCfgs {
-		h.reportPumpState(services.PumpID(id), pump)
-
+		err := h.reportPumpState(services.PumpID(id), pump)
+		if err != nil {
+			return nil, fmt.Errorf("failed to report pump %s state, err: %w", pump.Name, err)
+		}
 	}
 
-	// set all the pumps as available
+	// subscribe to HA commands
 	for _, pump := range h.pumpCfgs {
 		if token := h.client.Subscribe(pump.CommandTopic, 1, h.onHACommand); token.Wait() && token.Error() != nil {
-			return nil, fmt.Errorf("failed to subscribe to valve command topic, %w", token.Error())
+			return nil, fmt.Errorf("failed to subscribe to pump command topic, %w", token.Error())
 		}
 	}
 

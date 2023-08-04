@@ -27,20 +27,20 @@ func main() {
 	// Set the time format for logging using zerolog package
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 
+	// Create a new instance of the Home Assistant MQTT client
+	haMqttClient, err := homeassistant.NewHAMqttClient(conf.Mqtt)
+	lib.Panic(err)
+	defer haMqttClient.Disconnect(100)
+
 	// Create a new instance of the heating pumps handler service
 	ps, err := services.NewHeatingPumpsHandler(conf.Gpiod, conf.Pumps)
 	lib.Panic(err)
-
 	defer func() {
 		err := ps.Close()
 		if err != nil {
 			log.Error().Msgf("failed to close pump service: %s", err)
 		}
 	}()
-
-	// Create a new instance of the Home Assistant MQTT client
-	haMqttClient, err := homeassistant.NewHAMqttClient(conf.Mqtt)
-	lib.Panic(err)
 
 	// Create a new instance of the Home Assistant heating pumps handler controller
 	haPumpHandler, err := controllers.NewHAHeatingPumpsHandler(haMqttClient, conf, ps)
@@ -49,7 +49,19 @@ func main() {
 	defer func() {
 		err := haPumpHandler.Close()
 		if err != nil {
-			log.Error().Msgf("failed to close home assistant controller: %s", err)
+			log.Error().Msgf("failed to close home assistant pump controller: %s", err)
+		}
+	}()
+
+	ts := services.NewDS18B20Service()
+
+	tempSensorsCtl, err := controllers.NewHATemperatureSensorsHandler(haMqttClient, conf, ts)
+	lib.Panic(err)
+
+	defer func() {
+		err := tempSensorsCtl.Close()
+		if err != nil {
+			log.Error().Msgf("failed to close home assistant temperature sensor controller: %s", err)
 		}
 	}()
 
