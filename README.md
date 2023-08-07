@@ -34,16 +34,10 @@ To install the app on the Raspberry Pi, follow these steps:
 
 1. Clone the repository to the Raspberry Pi.
 2. Ensure the kernel version is 5.9 or higher on the Raspberry Pi.
-3. Build the app using `go build`.
-4. Run the app using `./heating_pump_controller`.
-
-## Future Enhancements
-
-In future releases, the app will be extended to include the following features:
-
-- Support for temperature sensors to measure temperatures in various locations.
-- Advanced control algorithms to optimize heating pump operation based on temperature readings.
-- Enhanced error handling and logging for improved reliability.
+3. Build the app using `make build`.
+4. Transfer app to Raspberry Pi using `make transfer HOST=pi@ip_address`
+5. Transfer config to Raspberry Pi, or create it manually in the same directory where binary is placed. 
+6. Run the app using `./heating_pump_controller`.
 
 ## Contributing
 
