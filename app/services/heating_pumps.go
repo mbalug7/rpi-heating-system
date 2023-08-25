@@ -41,18 +41,15 @@ type HeatingPumpsHandler struct {
 
 // NewHAHeatingHeatingPumpsHandler creates a new HeatingPumpsHandler with the given GPIO configuration and pump configurations
 // It requests GPIO lines for each pump and initializes the HeatingPumpsHandler with these lines
-func NewHeatingPumpsHandler(gpiodCfg *config.Gpiod, pumpsCfg []*config.PumpConfig) (*HeatingPumpsHandler, error) {
+func NewHeatingPumpsHandler(gpiodChip *gpiod.Chip, pumpsCfg []*config.PumpConfig) (*HeatingPumpsHandler, error) {
 
 	ph := &HeatingPumpsHandler{
 		pumps: make(map[PumpID]*gpiod.Line),
 	}
-	c, err := gpiod.NewChip(gpiodCfg.Chip, gpiod.WithConsumer(gpiodCfg.Consumer))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create GPIO chip: %w", err)
-	}
 
+	var err error
 	for _, pump := range pumpsCfg {
-		ph.pumps[PumpID(pump.ID)], err = c.RequestLine(
+		ph.pumps[PumpID(pump.ID)], err = gpiodChip.RequestLine(
 			pump.GpioStatePin,
 			gpiod.AsOutput(0),
 		)

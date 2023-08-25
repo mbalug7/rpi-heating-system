@@ -10,6 +10,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/warthog618/gpiod"
 
 	ConfLoader "rpi-heating-system/lib/config"
 )
@@ -32,13 +33,28 @@ func main() {
 	lib.Panic(err)
 	defer haMqttClient.Disconnect(100)
 
+	c, err := gpiod.NewChip(conf.Gpiod.Chip, gpiod.WithConsumer(conf.Gpiod.Consumer))
+	lib.Panic(err)
+
 	// Create a new instance of the heating pumps handler service
-	ps, err := services.NewHeatingPumpsHandler(conf.Gpiod, conf.Pumps)
+	ps, err := services.NewHeatingPumpsHandler(c, conf.Pumps)
 	lib.Panic(err)
 	defer func() {
 		err := ps.Close()
 		if err != nil {
 			log.Error().Msgf("failed to close pump service: %s", err)
+		}
+	}()
+
+	bh, err := services.NewButtonHandler(c, conf.Buttons)
+	lib.Panic(err)
+
+	btnSvc, err := controllers.NewHAButtonsHandler(haMqttClient, conf, bh)
+	lib.Panic(err)
+	defer func() {
+		err := btnSvc.Close()
+		if err != nil {
+			log.Error().Msgf("failed to close home assistant button controller: %s", err)
 		}
 	}()
 
