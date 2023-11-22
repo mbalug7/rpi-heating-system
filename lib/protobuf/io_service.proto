@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package io_service;
+
+option go_package = "io_service/pb";
+
+service IOService {
+    rpc GetTemperature (TemperatureRequest) returns (TemperatureResponse);
+    rpc SubscribeToButtonEvents (ButtonEventRequest) returns (stream ButtonEventResponse);
+    rpc SetGPIOState (SetGPIOStateRequest) returns (GPIOStateResponse);
+    rpc GetGPIOState (GPIOStateRequest) returns (GPIOStateResponse);
+    rpc SubscribeToGPIOState (GPIOStateRequest) returns (stream GPIOStateResponse);
+}
+
+message TemperatureRequest {
+    string sensor_id = 1;
+}
+
+message TemperatureResponse {
+    float temperature = 1;
+}
+
+message ButtonEventRequest {
+    string button_id = 1;
+}
+
+message ButtonEventResponse {
+    bool pressed = 1;
+}
+
+message SetGPIOStateRequest {
+    string gpio_id = 1;
+    bool state = 2;
+}
+
+message GPIOStateRequest {
+    string gpio_id = 1;
+}
+
+message GPIOStateResponse {
+    bool state = 1;
+}

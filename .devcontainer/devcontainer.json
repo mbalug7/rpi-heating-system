@@ -1,7 +1,7 @@
 {
     "name": "golang dev container",
-    "image": "mcr.microsoft.com/vscode/devcontainers/go:1.19",
-    "postCreateCommand": "go mod download",
+    "image": "mcr.microsoft.com/vscode/devcontainers/go:1.21",
+    "postCreateCommand": "go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && go mod download",
     "settings": {
         "go.useLanguageServer": true
     },
@@ -16,8 +16,15 @@
         "ms-vsliveshare.vsliveshare",
         "andyyaldoo.vscode-json",
         "golang.go",
-        "shardulm94.trailing-spaces"
+        "shardulm94.trailing-spaces",
+        "github.copilot",
+        "zxh404.vscode-proto3"
     ],
+    "features": {
+        "ghcr.io/devcontainers-contrib/features/protoc-asdf:1": {
+            "version": "latest"
+        }
+    },
     "remoteUser": "vscode",
     "mounts": [
         "type=bind,source=/home/mario/.ssh-backup,target=/home/vscode/.ssh,readonly"
