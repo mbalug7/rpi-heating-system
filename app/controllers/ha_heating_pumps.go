@@ -43,11 +43,15 @@ func NewHAHeatingPumpsHandler(
 		h.pumpCfgs[services.PumpID(pump.ID)] = pumpConf
 	}
 
+	return h, nil
+}
+
+func (h *HAHeatingPumpsHandler) OnConnect(client MQTT.Client) error {
 	// send configs to HA
 	for _, pump := range h.pumpCfgs {
 		err := h.sendConfig(pump)
 		if err != nil {
-			return nil, fmt.Errorf("failed to send config for pump %s, err: %w", pump.Name, err)
+			return fmt.Errorf("failed to send config for pump %s, err: %w", pump.Name, err)
 		}
 		// Home Assistant is slow sometimes while processing new configs... wait a bit
 		time.Sleep(100 * time.Millisecond)
@@ -57,7 +61,7 @@ func NewHAHeatingPumpsHandler(
 	for _, pump := range h.pumpCfgs {
 		token := h.client.Publish(pump.AvailabilityTopic, 0, true, "online")
 		if !token.WaitTimeout(2 * time.Second) {
-			return nil, fmt.Errorf("failed to update pump availability, %w", token.Error())
+			return fmt.Errorf("failed to update pump availability, %w", token.Error())
 		}
 	}
 
@@ -65,18 +69,22 @@ func NewHAHeatingPumpsHandler(
 	for id, pump := range h.pumpCfgs {
 		err := h.reportPumpState(services.PumpID(id), pump)
 		if err != nil {
-			return nil, fmt.Errorf("failed to report pump %s state, err: %w", pump.Name, err)
+			return fmt.Errorf("failed to report pump %s state, err: %w", pump.Name, err)
 		}
 	}
 
 	// subscribe to HA commands
 	for _, pump := range h.pumpCfgs {
 		if token := h.client.Subscribe(pump.CommandTopic, 1, h.onHACommand); token.Wait() && token.Error() != nil {
-			return nil, fmt.Errorf("failed to subscribe to pump command topic, %w", token.Error())
+			return fmt.Errorf("failed to subscribe to pump command topic, %w", token.Error())
 		}
 	}
+	return nil
+}
 
-	return h, nil
+func (h *HAHeatingPumpsHandler) OnConnectionLost(client MQTT.Client) error {
+	log.Warn().Msg("Pump Handler: MQTT connection lost")
+	return nil
 }
 
 // Close closes the HAHeatingPumpsHandler and performs necessary cleanup

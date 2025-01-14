@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"fmt"
 	"rpi-heating-system/app/config"
 	"rpi-heating-system/app/services"
@@ -20,6 +21,7 @@ type HAButtonsHandler struct {
 	haDevice         *model.Device
 	buttonsCfgs      map[int]*model.BinarySensor
 	svcSubscriptions []*services.BtnPressSubscription
+	cancelFuncs      []context.CancelFunc
 }
 
 // NewHAButtonsHandler creates a new instance of HAButtonsHandler
@@ -36,6 +38,12 @@ func NewHAButtonsHandler(
 		buttonsCfgs: make(map[int]*model.BinarySensor),
 	}
 
+	// build configs
+	for _, button := range conf.Buttons {
+		buttonConf := h.getButtonConfig(button)
+		h.buttonsCfgs[button.GpioInputPin] = buttonConf
+	}
+
 	for _, button := range conf.Buttons {
 		subs, err := buttonSvc.SubscribeOnButtonPress(button.GpioInputPin, fmt.Sprintf("%d", button.ID))
 		if err != nil {
@@ -44,38 +52,49 @@ func NewHAButtonsHandler(
 		h.svcSubscriptions = append(h.svcSubscriptions, subs)
 		log.Info().Msgf("Listening for button %s events", button.Name)
 
-		// start a goroutine to listen for button events
-		go func() {
+		// Create a context with cancel function
+		ctx, cancel := context.WithCancel(context.Background())
+		h.cancelFuncs = append(h.cancelFuncs, cancel)
+
+		// Start a goroutine to listen for button events
+		go func(ctx context.Context, subs *services.BtnPressSubscription) {
 			for {
-				event, ok := <-subs.EventCh
-				if !ok {
+				select {
+				case event, ok := <-subs.EventCh:
+					if !ok {
+						return
+					}
+					msg := "OFF"
+					if event.Type == gpiod.LineEventFallingEdge {
+						msg = "ON"
+					}
+					btnCfg, ok := h.buttonsCfgs[event.Offset]
+					if !ok {
+						log.Error().Msgf("Button %d not found in config", event.Offset)
+						continue
+					}
+					err := h.sendFeedbackMessage(msg, btnCfg.StateTopic)
+					if err != nil {
+						log.Error().Msgf("Failed to send feedback message for button %s, err: %s", btnCfg.UniqueID, err)
+					}
+				case <-ctx.Done():
+					// Stop the goroutine when context is cancelled
 					return
 				}
-				msg := "OFF"
-				if event.Type == gpiod.LineEventFallingEdge {
-					msg = "ON"
-				}
-				btnCfg, ok := h.buttonsCfgs[event.Offset]
-				if !ok {
-					log.Error().Msgf("Button %d not found in config", event.Offset)
-					continue
-				}
-				h.sendFeedbackMessage(msg, btnCfg.StateTopic)
 			}
-		}()
+		}(ctx, subs)
 	}
 
-	// build configs
-	for _, button := range conf.Buttons {
-		buttonConf := h.getButtonConfig(button)
-		h.buttonsCfgs[button.GpioInputPin] = buttonConf
-	}
+	return h, nil
+}
+
+func (h *HAButtonsHandler) OnConnect(client MQTT.Client) error {
 
 	// send configs
 	for _, button := range h.buttonsCfgs {
 		err := h.sendConfig(button)
 		if err != nil {
-			return nil, fmt.Errorf("failed to send config for button %s, err: %w", button.UniqueID, err)
+			return fmt.Errorf("failed to send config for button %s, err: %w", button.UniqueID, err)
 		}
 		// Home Assistant is slow sometimes while processing new configs... wait a bit
 		time.Sleep(100 * time.Millisecond)
@@ -85,11 +104,16 @@ func NewHAButtonsHandler(
 	for _, button := range h.buttonsCfgs {
 		token := h.client.Publish(button.AvailabilityTopic, 0, true, "online")
 		if !token.WaitTimeout(2 * time.Second) {
-			return nil, fmt.Errorf("failed to update button %s availability, %w", button.UniqueID, token.Error())
+			return fmt.Errorf("failed to update button %s availability, %w", button.UniqueID, token.Error())
 		}
 	}
 
-	return h, nil
+	return nil
+}
+
+func (h *HAButtonsHandler) OnConnectionLost(client MQTT.Client) error {
+	log.Warn().Msg("Button Handler: MQTT connection lost")
+	return nil
 }
 
 // Close closes the HAButtonsHandler and performs necessary cleanup
@@ -117,6 +141,9 @@ func (h *HAButtonsHandler) getButtonConfig(button *config.ButtonConfig) *model.B
 
 // sendFeedbackMessage sends feedback message to Home Assistant.
 func (obj *HAButtonsHandler) sendFeedbackMessage(msg string, stateTopic string) error {
+	if !obj.client.IsConnectionOpen() {
+		return fmt.Errorf("mqtt connection is not open")
+	}
 	token := obj.client.Publish(stateTopic, 0, true, msg)
 	if !token.WaitTimeout(2 * time.Second) {
 		return fmt.Errorf("failed to send feedback message to topic %s: %w", stateTopic, token.Error())

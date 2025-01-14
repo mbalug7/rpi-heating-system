@@ -20,6 +20,7 @@
     ],
     "remoteUser": "vscode",
     "mounts": [
-        "type=bind,source=/home/mario/.ssh-backup,target=/home/vscode/.ssh,readonly"
+        "type=bind,source=/home/work/.ssh,target=/home/vscode/.ssh,readonly",
+        "type=bind,source=/dev/gpiochip0,target=/dev/gpiochip0"
       ]
 }

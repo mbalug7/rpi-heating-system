@@ -6,6 +6,7 @@ import (
 	"rpi-heating-system/app/services"
 	"rpi-heating-system/lib/homeassistant/model"
 	"strconv"
+	"sync"
 	"time"
 
 	MQTT "github.com/eclipse/paho.mqtt.golang"
@@ -19,6 +20,7 @@ type HATemperatureSensorsHandler struct {
 	tempSensorReader services.TempSensorReader
 	sensorCfgs       map[string]*model.TemperatureSensor
 	ticker           *time.Ticker
+	sync.Mutex
 }
 
 func NewHATemperatureSensorsHandler(
@@ -40,11 +42,18 @@ func NewHATemperatureSensorsHandler(
 		h.sensorCfgs[sensor.ID] = sensorConf
 	}
 	log.Debug().Msgf("Sending sensor configs %+v", h.sensorCfgs)
+
+	return h, nil
+}
+
+func (h *HATemperatureSensorsHandler) OnConnect(client MQTT.Client) error {
+	h.Lock()
+	defer h.Unlock()
 	// send configs
 	for _, sensor := range h.sensorCfgs {
 		err := h.sendConfig(sensor)
 		if err != nil {
-			return nil, fmt.Errorf("failed to send config for sensor %s, err: %w", sensor.UniqueID, err)
+			return fmt.Errorf("failed to send config for sensor %s, err: %w", sensor.UniqueID, err)
 		}
 		// Home Assistant is slow sometimes while processing new configs... wait a bit
 		time.Sleep(100 * time.Millisecond)
@@ -54,14 +63,14 @@ func NewHATemperatureSensorsHandler(
 	for _, sensor := range h.sensorCfgs {
 		token := h.client.Publish(sensor.AvailabilityTopic, 0, true, "online")
 		if !token.WaitTimeout(2 * time.Second) {
-			return nil, fmt.Errorf("failed to update sensor %s availability, %w", sensor.UniqueID, token.Error())
+			return fmt.Errorf("failed to update sensor %s availability, %w", sensor.UniqueID, token.Error())
 		}
 	}
 
 	for id, sensor := range h.sensorCfgs {
 		err := h.reportSensorTemperature(id, sensor)
 		if err != nil {
-			return nil, fmt.Errorf("failed to report sensor %s temperature, err: %w", sensor.UniqueID, err)
+			return fmt.Errorf("failed to report sensor %s temperature, err: %w", sensor.UniqueID, err)
 		}
 	}
 
@@ -78,16 +87,24 @@ func NewHATemperatureSensorsHandler(
 			}
 		}
 	}()
-
-	// Store the ticker in the struct to be able to stop it later
 	h.ticker = ticker
+	return nil
+}
 
-	return h, nil
+func (obj *HATemperatureSensorsHandler) OnConnectionLost(client MQTT.Client) error {
+	log.Warn().Msg("Pump Handler: MQTT connection lost")
+	obj.Close()
+	return nil
 }
 
 // Close closes the HATemperatureSensorsHandler and performs necessary cleanup
 func (obj *HATemperatureSensorsHandler) Close() error {
-	obj.ticker.Stop()
+	obj.Lock()
+	defer obj.Unlock()
+	if obj.ticker != nil {
+		obj.ticker.Stop()
+		obj.ticker = nil
+	}
 	return nil
 }
 
